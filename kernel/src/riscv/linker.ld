@@ -1,12 +1,15 @@
 ENTRY(_start);
 
+STACK_SIZE = 4K;
+MAX_HARTS = 1;
+
 MEMORY {
     kernel_space (rwx) : ORIGIN = 0x80200000, LENGTH = 2M
 }
 
 SECTIONS {
     .text : ALIGN(4K) {
-        *(.init); /* Put the initialization first. */
+        *(.text.init);
         *(.text*);
     } > kernel_space
 
@@ -19,12 +22,8 @@ SECTIONS {
     } > kernel_space
 
     .bss : ALIGN(4K) {
-        PROVIDE(bss_start = .);
         *(.bss*);
-        . += 4096;
-        PROVIDE(stack_top = .);
-        . += 4096;
-        PROVIDE(global_pointer = .);
-        PROVIDE(bss_end = .);
+        . += STACK_SIZE * MAX_HARTS;
+        PROVIDE(STACK_TOP = .);
     } > kernel_space
 }
