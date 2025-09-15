@@ -17,18 +17,12 @@
 // - `XLEN`: The width of registers in the _current_ mode.
 //   - When prefixed with `U/S/M`, refers to the width in `User`, `Supervisor`, and `Machine` modes respectively.
 // - `hart`: Hardware Thread; A basic unit of execution (i.e. a CPU core).
-//
-// TODO:
-// - Do we need to add a global pointer? I'm not sure if I am using the related sections.
 
 .section .text.init
 .global _start
 
 _start:
-        mv t0, a0 // Move the hartid into t0.
-        mv t1, a1 // Move the devicetree blob pointer into t1.
-
         la sp, STACK_TOP // Set the stack pointer to the top of the stack for this hartid.
-
-        tail kmain // Invoke `kmain`.
+        tail kmain_riscv // Invoke `kmain_riscv` with a0=hartid and a1=dtb_ptr.
+        j .
 .end

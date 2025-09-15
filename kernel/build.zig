@@ -12,18 +12,29 @@ pub fn build(b: *std.Build) void {
         .abi = .none,
     });
 
+    const uart = b.option(bool, "uart", "Enable UART output (default=false)") orelse false;
+
+    // Options Module
+
+    const options = b.addOptions();
+    options.addOption(bool, "uart", uart);
+
+    // ---
+
     const mod = b.createModule(.{
-        .root_source_file = b.path("src/riscv/main.zig"),
+        .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
         .code_model = .medium, // TODO: Find citation for why we do this.
         .strip = false,
     });
+    mod.addImport("options", options.createModule());
 
     const exe = b.addExecutable(.{
         .name = "kernel.elf",
         .root_module = mod,
     });
+
     exe.addAssemblyFile(b.path("src/riscv/startup.s"));
     exe.setLinkerScript(b.path("src/riscv/linker.ld"));
 
