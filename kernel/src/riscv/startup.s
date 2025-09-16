@@ -18,12 +18,36 @@
 //   - When prefixed with `U/S/M`, refers to the width in `User`, `Supervisor`, and `Machine` modes respectively.
 // - `hart`: Hardware Thread; A basic unit of execution (i.e. a CPU core).
 
-.section .text.init
+.section .init
 .global _start
 
 _start:
-        // TODO: Give each hartid it's own stack.
-        la sp, __stack_top // Set the stack pointer to the top of the stack for this hartid.
-        tail kmain_riscv // Invoke `kmain_riscv` with a0=hartid and a1=dtb_ptr.
-        j .
+        // Set the stack pointer to the top of the stack.
+        la sp, __stack_top 
+        
+        // Compute the stack offset for this hartid.
+        // NOTE: We can't use la here as __stack_size is absolute (outside of a section).
+        lui t0, %hi(__stack_size)
+        addi t0, t0, %lo(__stack_size)
+        mul t0, t0, a0
+
+        // Add the offset to the stack pointer.
+        add sp, sp, t0
+
+        // Zero BSS
+        la t0, __bss_start
+        la t1, __bss_end
+        bss:
+                sd zero, (t0)
+                addi t0, t0, 0x8
+                bltu t0, t1, bss
+
+        
+        // Invoke `kmain_riscv` with a0=hartid and a1=dtb_ptr, setting the return address to ra.
+        jal ra, kmain_riscv 
+
+        // Hang if kmain returns.        
+        1:
+                wfi
+                j 1b
 .end

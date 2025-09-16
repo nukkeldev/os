@@ -25,7 +25,8 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
-        .code_model = .medium, // TODO: Find citation for why we do this.
+        // Ensure the kernel uses relative symbol addresses so things work after vm relocation.
+        .code_model = .medany,
         .strip = false,
     });
     mod.addImport("options", options.createModule());
@@ -56,6 +57,10 @@ pub fn build(b: *std.Build) void {
             "qemu-system-riscv64",
             "-machine",
             "virt",
+            "-m",
+            "1G",
+            "-device",
+            "virtio-vga", // VGA over PCI
             "-kernel",
         });
         cmd.addFileArg(b.path("zig-out/bin/kernel.elf"));

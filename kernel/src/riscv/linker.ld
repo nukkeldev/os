@@ -1,7 +1,7 @@
 ENTRY(_start);
 
-STACK_SIZE = 4K;
-MAX_HARTS = 1;
+__stack_size = 4K;
+__max_harts = 1;
 
 MEMORY {
     KERNEL (rwx) : ORIGIN = 0x80200000, LENGTH = 2M
@@ -9,7 +9,7 @@ MEMORY {
 
 SECTIONS {
     .text : ALIGN(4K) {
-        *(.text.init);
+        *(.init);
         *(.text*);
     } > KERNEL
 
@@ -22,10 +22,14 @@ SECTIONS {
     } > KERNEL
 
     .bss : ALIGN(4K) {
+        __bss_start = .;
         *(.bss*);
-        . += STACK_SIZE * MAX_HARTS;
-        PROVIDE(__stack_top = .);
+        . = ALIGN(8);
+        __bss_end = .;
+
+        . += __stack_size * __max_harts;
+        __stack_top = .;
     } > KERNEL
 
-    PROVIDE(__kernel_end = .);
+    __kernel_end = .;
 }
