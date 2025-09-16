@@ -9,7 +9,7 @@
 
 // -- Imports -- //
 
-const uart = @import("uart.zig");
+const uart = @import("../io/uart.zig");
 
 // -- Errors -- //
 
