@@ -108,7 +108,7 @@ pub fn getFirst2x2RegForNodeByCompatibles(
                 const val_byte_len = b2n(u32, @intFromEnum(dtb.structure[i + 1]));
                 const val_cell_len = @import("std").math.divCeil(u32, val_byte_len, @sizeOf(fdt_struct_token)) catch unreachable;
                 const name_offs = b2n(u32, @intFromEnum(dtb.structure[i + 2]));
-                
+
                 const prop_name: []const u8 = mem.span(@as([*:0]const u8, @ptrCast(&dtb.strings[@intCast(name_offs)])));
 
                 if (found and mem.eql(u8, prop_name, "reg")) {
@@ -197,8 +197,7 @@ pub fn format(self: @This(), writer: *@import("std").Io.Writer) @import("std").I
         \\    - Version: {} (>={})
         \\    - Boot CPU ID: {}
         \\  - Reserved Memory [+0x{X}..]
-        \\  - Structure [+0x{X}..0x{X}]
-        \\  - Strings [+0x{X}..0x{X}]
+        \\
     , .{
         b2n(u32, self.header.magic),
         MAGIC,
@@ -207,6 +206,16 @@ pub fn format(self: @This(), writer: *@import("std").Io.Writer) @import("std").I
         b2n(u32, self.header.last_comp_version),
         b2n(u32, self.header.boot_cpuid_phys),
         b2n(u32, self.header.off_mem_rsvmap),
+    });
+
+    for (self.mem_rsv) |rsv| {
+        try writer.print("      - Address: 0x{X}, Size: 0x{X}\n", .{ rsv.address, rsv.size });
+    }
+
+    try writer.print(
+        \\  - Structure [+0x{X}..0x{X}]
+        \\  - Strings [+0x{X}..0x{X}]
+    , .{
         b2n(u32, self.header.off_dt_struct),
         b2n(u32, self.header.off_dt_struct + self.header.size_dt_struct),
         b2n(u32, self.header.off_dt_strings),

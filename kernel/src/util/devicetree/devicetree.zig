@@ -1,1 +1,0 @@
-//! An parsed devicetree for efficent traversal.

@@ -23,7 +23,7 @@
 
 _start:
         // TODO: Give each hartid it's own stack.
-        la sp, STACK_TOP // Set the stack pointer to the top of the stack for this hartid.
+        la sp, __stack_top // Set the stack pointer to the top of the stack for this hartid.
         tail kmain_riscv // Invoke `kmain_riscv` with a0=hartid and a1=dtb_ptr.
         j .
 .end

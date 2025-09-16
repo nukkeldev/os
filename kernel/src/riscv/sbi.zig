@@ -7,10 +7,6 @@
 //! See https://github.com/riscv-non-isa/riscv-sbi-doc/blob/master/src/binary-encoding.adoc and sibling
 //! documents.
 
-// -- Imports -- //
-
-const uart = @import("../io/uart.zig");
-
 // -- Errors -- //
 
 /// Return codes for SBI functions.
@@ -62,8 +58,6 @@ pub const Base = struct {
         var errc: isize = undefined;
         var exists: bool = undefined;
 
-        uart.print("[SBI.probeExtension] Probing if extension eid=0x{X} exists", .{eid});
-
         asm volatile (
             \\ecall
             : [err] "={a0}" (errc),
@@ -73,10 +67,7 @@ pub const Base = struct {
               [typ] "{a0}" (eid),
             : .{ .x10 = true, .x11 = true });
 
-        const err = errFromInt(errc);
-        uart.print("[SBI.probeExtension] err={?} exists={}", .{ err, exists });
-
-        return err orelse exists;
+        return errFromInt(errc) orelse exists;
     }
 };
 
@@ -88,8 +79,6 @@ pub const Debug = struct {
     pub fn consoleWrite(str: []const u8) Err!usize {
         var errc: isize = undefined;
         var bytes: usize = undefined;
-
-        uart.print("[SBI.consoleWrite] Writing {*}[0:{}] to console", .{ str.ptr, str.len });
 
         asm volatile (
             \\ecall
@@ -103,12 +92,6 @@ pub const Debug = struct {
             : .{ .x10 = true, .x11 = true });
 
         const err = errFromInt(errc);
-        uart.print("[SBI.consoleWrite] err={?} bytes={}", .{ err, bytes });
-        if (err != null and bytes != str.len) uart.print(
-            "[SBI.consoleWrite] Error: Expected to write {} bytes, but only wrote {}!",
-            .{ str.len, bytes },
-        );
-
         // Ignore the calls when they are not supported.
         if (err != null and err.? == Err.not_supported) return str.len;
 
@@ -135,7 +118,6 @@ pub const SystemReset = struct {
     pub fn reset(reset_type: ResetType, reset_reason: ResetReason) Err!noreturn {
         var err: isize = undefined;
 
-        uart.print("Resetting type={t} reason={t}", .{ reset_type, reset_reason });
         _ = Debug.consoleWrite("[SBI] Goodbye, World!\n") catch {};
 
         asm volatile (

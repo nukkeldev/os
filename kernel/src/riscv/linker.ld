@@ -4,26 +4,28 @@ STACK_SIZE = 4K;
 MAX_HARTS = 1;
 
 MEMORY {
-    kernel_space (rwx) : ORIGIN = 0x80200000, LENGTH = 2M
+    KERNEL (rwx) : ORIGIN = 0x80200000, LENGTH = 2M
 }
 
 SECTIONS {
     .text : ALIGN(4K) {
         *(.text.init);
         *(.text*);
-    } > kernel_space
+    } > KERNEL
 
     .rodata : ALIGN(4K) {
         *(.rodata*);
-    } > kernel_space
+    } > KERNEL
 
     .data : ALIGN(4K) {
         *(.data*);
-    } > kernel_space
+    } > KERNEL
 
     .bss : ALIGN(4K) {
         *(.bss*);
         . += STACK_SIZE * MAX_HARTS;
-        PROVIDE(STACK_TOP = .);
-    } > kernel_space
+        PROVIDE(__stack_top = .);
+    } > KERNEL
+
+    PROVIDE(__kernel_end = .);
 }
