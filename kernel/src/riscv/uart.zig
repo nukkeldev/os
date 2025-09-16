@@ -1,6 +1,6 @@
 //! I/O access to UART.
 
-var BUFFER: [4096]u8 = @splat(0);
+var BUFFER: [16 * 1024]u8 = @splat(0);
 const ADDR: *u8 = @ptrFromInt(0x10_000_000); // TODO: Probe this from the dtb.
 
 pub fn putChar(c: u8) void {
