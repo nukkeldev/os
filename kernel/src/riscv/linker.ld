@@ -4,22 +4,22 @@ __stack_size = 4K;
 __max_harts = 1;
 
 MEMORY {
-    KERNEL (rwx) : ORIGIN = 0x80200000, LENGTH = 2M
+    RAM (rwx) : ORIGIN = 0x80200000, LENGTH = 2M
 }
 
 SECTIONS {
     .text : ALIGN(4K) {
         *(.init);
         *(.text*);
-    } > KERNEL
+    } > RAM
 
     .rodata : ALIGN(4K) {
         *(.rodata*);
-    } > KERNEL
+    } > RAM
 
     .data : ALIGN(4K) {
         *(.data*);
-    } > KERNEL
+    } > RAM
 
     .bss : ALIGN(4K) {
         __bss_start = .;
@@ -29,7 +29,7 @@ SECTIONS {
 
         . += __stack_size * __max_harts;
         __stack_top = .;
-    } > KERNEL
+    } > RAM
 
     __kernel_end = .;
 }

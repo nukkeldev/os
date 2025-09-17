@@ -22,8 +22,11 @@
 .global _start
 
 _start:
+        // Park all harts but the boot.
+        bnez a0, 1f
+
         // Set the stack pointer to the top of the stack.
-        la sp, __stack_top 
+        la sp, __stack_top
         
         // Compute the stack offset for this hartid.
         // NOTE: We can't use la here as __stack_size is absolute (outside of a section).
@@ -42,6 +45,8 @@ _start:
                 addi t0, t0, 0x8
                 bltu t0, t1, bss
 
+        // Configure setp for Sv39 VM paging.
+        csrw satp, zero
         
         // Invoke `kmain_riscv` with a0=hartid and a1=dtb_ptr, setting the return address to ra.
         jal ra, kmain_riscv 
