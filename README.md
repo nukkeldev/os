@@ -10,6 +10,7 @@ They are in no particular order.
 - [Uros Popovic's Blog](https://popovicu.com/)
   - Specifically his articles on RISC-V programming.
   - Served as the "push" to start this project.
+- [RISC-V OS using Rust](https://osblog.stephenmarz.com/)
 
 ## License
 

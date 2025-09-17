@@ -3,6 +3,8 @@
 
 // -- Imports -- //
 
+const std = @import("std");
+
 const heap = @import("../common/mem/heap.zig");
 
 const uart = @import("../common/io/uart.zig");
@@ -12,27 +14,27 @@ const fdt = @import("../common/devicetree/devicetree_blob.zig");
 // -- Main -- //
 
 pub export fn kmain_riscv(hartid: usize, dtb_ptr: ?*anyopaque) noreturn {
-    uart.print("Entering `kmain_riscv` on hartid={}", .{hartid});
+    uart.printf("Entering `kmain_riscv` on hartid={}", .{hartid});
 
     main(hartid, dtb_ptr) catch |e| {
-        uart.print("Error from `main`: {}", .{e});
+       std.debug.panic("Error from `main`: {}", .{e});
     };
 
-    while (true) {} // Just in case.
+    while (true) {}
 }
 
-fn main(hartid: usize, dtb_ptr: ?*anyopaque) !noreturn {
-    uart.print("Entering `main` on hartid={}", .{hartid});
+fn main(hartid: usize, dtb_ptr: ?*anyopaque) !void {
+    uart.printf("Entering `main` on hartid={}", .{hartid});
 
     const dtb = try fdt.parse(dtb_ptr);
-    uart.print("{f}", .{dtb});
+    uart.printf("{f}", .{dtb});
 
     _ = uart.initFromDevicetree(&dtb);
 
     if (!try sbi.Base.probeExtension(sbi.Debug.EID)) {
-        uart.print("SBI DBCN is not available, further use will be disabled.", .{});
+        uart.printf("SBI DBCN is not available, further use will be disabled.", .{});
     } else {
-        uart.print("SBI DBCN is available.", .{});
+        uart.printf("SBI DBCN is available.", .{});
     }
 
     _ = try sbi.Debug.consoleWrite("[SBI] Hello, World!\n");
@@ -40,14 +42,47 @@ fn main(hartid: usize, dtb_ptr: ?*anyopaque) !noreturn {
     heap.ufaInit();
     const allocator = heap.ufa.?.allocator();
 
-    uart.print("Kernel ends and heap starts at 0x{X}.", .{heap.ufa.?.next_addr});
-    uart.print("Subsequent memory is available for use, with the exception of the previously listed reserved memory slices.", .{});
+    uart.printf("Kernel ends and heap starts at 0x{X}.", .{heap.ufa.?.next_addr});
+    uart.printf("Subsequent memory is available for use, with the exception of the previously listed reserved memory slices.", .{});
 
-    uart.print("Attempting to dynamically allocate memory for a format...", .{});
+    uart.printf("Attempting to dynamically allocate memory for a format...", .{});
 
     const str = try @import("std").fmt.allocPrint(allocator, "This was formatted by an allocator at 0x{X}!", .{@intFromPtr(&heap.ufa.?)});
-    uart.print("{s}", .{str});
+    uart.printf("{s}", .{str});
 
     // NOTE: We can bypass SBI by writing to the syscon MMIO.
     try sbi.SystemReset.reset(.shutdown, .no_reason);
 }
+
+// -- VM Setup -- //
+
+pub export fn setup_vm_riscv() void {}
+
+// -- Panic Handler -- //
+
+pub const panic = @import("std").debug.FullPanic(struct {
+    const debug = std.debug;
+    const io = std.io;
+
+    const StackIterator = debug.StackIterator;
+    const SelfInfo = debug.SelfInfo;
+    const UnwindError = debug.UnwindError;
+    const Writer = std.Io.Writer;
+
+    /// Prints the message to UART along with an address stacktrace, trys to shutdown, then traps
+    /// if that failed. This takes bits and pieces of the default panic implementation.
+    pub fn call(msg: []const u8, ra: ?usize) noreturn {
+        @branchHint(.cold);
+        uart.printf("Panic: {s}", .{msg});
+        uart.printf("Stack Trace:", .{});
+
+        var it = StackIterator.init(ra, null);
+        var i: usize = 0;
+        while (it.next()) |return_address| {
+            uart.printf("\t[{}] 0x{X}", .{ i, return_address });
+            i += 1;
+        }
+
+        while (true) {}
+    }
+}.call);

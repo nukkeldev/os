@@ -19,17 +19,43 @@ pub fn initFromDevicetree(dtb: *const @import("../devicetree/devicetree_blob.zig
     // TODO: Configure UART FIFO, Word Length, etc.
     // TODO: On a non-virt board, need to get baud rate.
 
-    print("uart address set to 0x{X}", .{uart.address});
+    printf("uart address set to 0x{X}", .{uart.address});
 
     return true;
 }
 
 // -- Usage -- //
 
-/// Prints to UART TX.
-pub fn print(comptime fmt: []const u8, args: anytype) void {
+/// Formats and prints to UART TX.
+// TODO: Trunacate messages if the buffer is overflown.
+pub fn printf(comptime fmt: []const u8, args: anytype) void {
     if (comptime !@import("options").uart) return;
 
     const str = @import("std").fmt.bufPrint(&BUFFER, "[UART] " ++ fmt ++ "\n", args) catch unreachable;
     for (str) |c| ADDR.* = c;
 }
+
+// -- Writer -- //
+
+const Io = @import("std").Io;
+
+pub fn writer() Io.Writer {
+    return .{ .buffer = &BUFFER, .vtable = &Writer.vtable };
+}
+
+const Writer = struct {
+    pub const vtable: Io.Writer.VTable = .{ .drain = drain };
+
+    fn drain(w: *Io.Writer, data: []const []const u8, _: usize) Io.Writer.Error!usize {
+        printf("{s}", .{w.buffer[0..w.end]});
+        w.end = 0;
+
+        var bytes: usize = 0;
+        for (data) |datum| {
+            printf("{s}", .{datum});
+            bytes += datum.len;
+        }
+
+        return bytes;
+    }
+};

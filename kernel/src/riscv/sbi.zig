@@ -7,6 +7,9 @@
 //! See https://github.com/riscv-non-isa/riscv-sbi-doc/blob/master/src/binary-encoding.adoc and sibling
 //! documents.
 
+const uart = @import("../common/io/uart.zig");
+const fmt = @import("std").fmt;
+
 // -- Errors -- //
 
 /// Return codes for SBI functions.
@@ -33,7 +36,7 @@ pub fn errFromInt(err: isize) ?Err {
         0x0 => null,
         -0x1 => Err.failed,
         -0x2 => Err.not_supported,
-        -0x3 => Err.invalid_address,
+        -0x3 => Err.invalid_param,
         -0x4 => Err.denied,
         -0x5 => Err.invalid_address,
         -0x6 => Err.already_available,
@@ -65,7 +68,7 @@ pub const Base = struct {
             : [eid] "{a7}" (EID),
               [fid] "{a6}" (3),
               [typ] "{a0}" (eid),
-            : .{ .x10 = true, .x11 = true });
+            : .{});
 
         return errFromInt(errc) orelse exists;
     }
@@ -89,7 +92,7 @@ pub const Debug = struct {
               [typ] "{a0}" (str.len),
               [rsn] "{a1}" (@intFromPtr(str.ptr)),
               [___] "{a2}" (0),
-            : .{ .x10 = true, .x11 = true });
+            : .{});
 
         const err = errFromInt(errc);
         // Ignore the calls when they are not supported.
@@ -115,7 +118,7 @@ pub const SystemReset = struct {
         system_failure = 0x1,
     };
 
-    pub fn reset(reset_type: ResetType, reset_reason: ResetReason) Err!noreturn {
+    pub fn reset(reset_type: ResetType, reset_reason: ResetReason) Err!void {
         var err: isize = undefined;
 
         _ = Debug.consoleWrite("[SBI] Goodbye, World!\n") catch {};
@@ -127,8 +130,9 @@ pub const SystemReset = struct {
               [fid] "{a6}" (0),
               [typ] "{a0}" (@intFromEnum(reset_type)),
               [rsn] "{a1}" (@intFromEnum(reset_reason)),
-            : .{ .x10 = true, .x11 = true });
+            : .{});
 
+        uart.printf("[SBI] Failed to reset! Error: {}({})", .{ errFromInt(err).?, err });
         return errFromInt(err).?;
     }
 };
