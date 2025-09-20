@@ -17,7 +17,7 @@ pub export fn kmain_riscv(hartid: usize, dtb_ptr: ?*anyopaque) noreturn {
     uart.printf("Entering `kmain_riscv` on hartid={}", .{hartid});
 
     main(hartid, dtb_ptr) catch |e| {
-       std.debug.panic("Error from `main`: {}", .{e});
+        std.debug.panic("Error from `main`: {}", .{e});
     };
 
     while (true) {}

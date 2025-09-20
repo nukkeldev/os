@@ -217,7 +217,7 @@ pub fn format(self: @This(), writer: *@import("std").Io.Writer) @import("std").I
         \\  - Strings [+0x{X}..0x{X}]
     , .{
         b2n(u32, self.header.off_dt_struct),
-        b2n(u32, self.header.off_dt_struct + self.header.size_dt_struct),
+        b2n(u32, self.header.off_dt_struct) + b2n(u32, self.header.size_dt_struct),
         b2n(u32, self.header.off_dt_strings),
         b2n(u32, self.header.off_dt_strings) + b2n(u32, self.header.size_dt_strings),
     });
