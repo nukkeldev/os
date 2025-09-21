@@ -40,19 +40,39 @@ _start:
         // Zero BSS
         la t0, __bss_start
         la t1, __bss_end
-        bss:
+        bgeu t0, t1, 2f
+        1:
                 sd zero, (t0)
                 addi t0, t0, 0x8
-                bltu t0, t1, bss
+                bltu t0, t1, 1b
+        2:
+        
 
         // Configure setp for Sv39 VM paging.
         csrw satp, zero
-        
-        // Invoke `kmain_riscv` with a0=hartid and a1=dtb_ptr, setting the return address to ra.
-        jal ra, kmain_riscv 
+
+        // Setup S-mode traps
+        la t0, trap_handler_riscv
+        csrw stvec, t0
+
+        // Configure interrupts
+        li t0, (0b01 << 8) | (1 << 5) | (1 << 1)
+        csrw sstatus, t0      
+
+        // Set sret to return to kmain
+        la t1, kmain_riscv
+        csrw sepc, t1
+
+        // Enable interrupts
+        li t3, (1 << 1) | (1 << 5) | (1 << 9)
+        csrw sie, t3
+
+        // If we return, park the hart.
+        la ra, 3f
+        sret
 
         // Hang if kmain returns.        
-        1:
+        3:
                 wfi
-                j 1b
+                j 3b
 .end

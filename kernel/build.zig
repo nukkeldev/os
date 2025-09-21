@@ -36,6 +36,7 @@ pub fn build(b: *std.Build) void {
         .root_module = mod,
     });
 
+    exe.addAssemblyFile(b.path("src/riscv/trap.s"));
     exe.addAssemblyFile(b.path("src/riscv/startup.s"));
     exe.setLinkerScript(b.path("src/riscv/linker.ld"));
 

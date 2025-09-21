@@ -10,6 +10,7 @@ const heap = @import("../common/mem/heap.zig");
 const uart = @import("../common/io/uart.zig");
 const sbi = @import("sbi.zig");
 const fdt = @import("../common/devicetree/devicetree_blob.zig");
+const asmh = @import("asmh.zig");
 
 // -- Main -- //
 
@@ -49,6 +50,9 @@ fn main(hartid: usize, dtb_ptr: ?*anyopaque) !void {
 
     const str = try @import("std").fmt.allocPrint(allocator, "This was formatted by an allocator at 0x{X}!", .{@intFromPtr(&heap.ufa.?)});
     uart.printf("{s}", .{str});
+
+    const sstatus = asmh.csrr(asmh.SStatus, "sstatus");
+    uart.printf("{}", .{sstatus});
 
     // NOTE: We can bypass SBI by writing to the syscon MMIO.
     try sbi.SystemReset.reset(.shutdown, .no_reason);
