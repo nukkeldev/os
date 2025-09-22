@@ -20,6 +20,7 @@
 
 .section .init
 .global _start
+.type   _start, @function
 
 _start:
         // Park all harts but the boot.

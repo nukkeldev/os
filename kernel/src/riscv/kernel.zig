@@ -62,6 +62,21 @@ fn main(hartid: usize, dtb_ptr: ?*anyopaque) !void {
 
 pub export fn setup_vm_riscv() void {}
 
+// -- Trap Handler -- //
+
+pub export fn trap_handler_body_riscv(
+    cause: usize,
+    return_address: usize,
+    trap_value: usize,
+    context: usize,
+) void {
+    _ = cause;
+    _ = return_address;
+    _ = trap_value;
+    _ = context;
+    uart.printf("TRAPPED", .{});
+}
+
 // -- Panic Handler -- //
 
 pub const panic = @import("std").debug.FullPanic(struct {
