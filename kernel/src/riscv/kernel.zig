@@ -9,7 +9,7 @@ const heap = @import("../common/mem/heap.zig");
 
 const uart = @import("../common/io/uart.zig");
 const sbi = @import("sbi.zig");
-const fdt = @import("../common/devicetree/devicetree_blob.zig");
+const Devicetree = @import("../common/devicetree/devicetree.zig");
 const asmh = @import("asmh.zig");
 
 // -- Main -- //
@@ -27,11 +27,6 @@ pub export fn kmain_riscv(hartid: usize, dtb_ptr: ?*anyopaque) noreturn {
 fn main(hartid: usize, dtb_ptr: ?*anyopaque) !void {
     uart.printf("Entering `main` on hartid={}", .{hartid});
 
-    const dtb = try fdt.parse(dtb_ptr);
-    uart.printf("{f}", .{dtb});
-
-    _ = uart.initFromDevicetree(&dtb);
-
     if (!try sbi.Base.probeExtension(sbi.Debug.EID)) {
         uart.printf("SBI DBCN is not available, further use will be disabled.", .{});
     } else {
@@ -42,6 +37,14 @@ fn main(hartid: usize, dtb_ptr: ?*anyopaque) !void {
 
     heap.ufaInit();
     const allocator = heap.ufa.?.allocator();
+
+    const dt = try Devicetree.parseFromBlob(allocator, dtb_ptr);
+    uart.initFromDevicetree(&dt) catch |e| {
+        uart.printf("Failed to initialize uart! Error: {}", .{e});
+    };
+
+    const dram_len = try dt.getDeviceByName("memory").?.getProp("reg").?.readInt(u64, 8);
+    uart.printf("Memory Size: 0x{X}", .{dram_len});
 
     uart.printf("Kernel ends and heap starts at 0x{X}.", .{heap.ufa.?.next_addr});
     uart.printf("Subsequent memory is available for use, with the exception of the previously listed reserved memory slices.", .{});

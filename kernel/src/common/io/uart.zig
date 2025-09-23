@@ -12,16 +12,17 @@ var ADDR: *u8 = @ptrFromInt(0x10_000_000); // Hardcoded Fallback (set to QEMU vi
 
 /// Trys to poll the DTB for the address of a UART device ("ns16550a").
 /// Returns `true` on success.
-pub fn initFromDevicetree(dtb: *const @import("../devicetree/devicetree_blob.zig")) bool {
-    const uart = dtb.getFirst2x2RegForNodeByCompatibles(DTB_COMPAT) orelse return false;
-    ADDR = @ptrFromInt(uart.address);
+pub fn initFromDevicetree(dt: *const @import("../devicetree/devicetree.zig")) !void {
+    const device_opt = dt.getCompatibleDevice("ns16550a");
+    if (device_opt) |device| {
+        const addr = try device.getProp("reg").?.readInt(u64, 0);
+
+        printf("uart address set to 0x{X}", .{addr});
+        ADDR = @ptrFromInt(addr);
+    }
 
     // TODO: Configure UART FIFO, Word Length, etc.
     // TODO: On a non-virt board, need to get baud rate.
-
-    printf("uart address set to 0x{X}", .{uart.address});
-
-    return true;
 }
 
 // -- Usage -- //
