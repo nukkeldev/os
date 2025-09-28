@@ -18,7 +18,7 @@
 //   - When prefixed with `U/S/M`, refers to the width in `User`, `Supervisor`, and `Machine` modes respectively.
 // - `hart`: Hardware Thread; A basic unit of execution (i.e. a CPU core).
 
-.section .init
+.section .text.init
 .global _start
 .type   _start, @function
 
@@ -52,21 +52,28 @@ _start:
         // Configure setp for Sv39 VM paging.
         csrw satp, zero
 
+        // Reset timer interrupts
+        mv t0, a0
+        mv t1, a1
+        jal ra, reset_time_interrupts_riscv
+        mv a0, t1
+        mv a1, t1
+
         // Setup S-mode traps
-        la t0, trap_handler_riscv
+        la t0, interrupt_handler_riscv
         csrw stvec, t0
 
         // Configure interrupts
-        li t0, (0b01 << 8) | (1 << 5) | (1 << 1)
-        csrw sstatus, t0      
+        li t0, (1 << 1) | (1 << 5) | (1 << 8)
+        csrs sstatus, t0      
 
         // Set sret to return to kmain
         la t1, kmain_riscv
         csrw sepc, t1
 
         // Enable interrupts
-        li t3, (1 << 1) | (1 << 5) | (1 << 9)
-        csrw sie, t3
+        li t3, (1 << 9) | (1 << 1) | (1 << 5)
+        csrs sie, t3
 
         // If we return, park the hart.
         la ra, 3f

@@ -136,3 +136,19 @@ pub const SystemReset = struct {
         return errFromInt(err).?;
     }
 };
+
+// -- Time Extension -- //
+
+pub const Time = struct {
+    pub const EID = 0x54494D45;
+
+    pub fn setTimer(next_event_time: u64) void {
+        asm volatile (
+            \\ecall
+            :
+            : [eid] "{a7}" (EID),
+              [fid] "{a6}" (0),
+              [tim] "{a0}" (next_event_time),
+            : .{});
+    }
+};

@@ -17,7 +17,7 @@ pub fn initFromDevicetree(dt: *const @import("../devicetree/devicetree.zig")) !v
     if (device_opt) |device| {
         const addr = try device.getProp("reg").?.readInt(u64, 0);
 
-        printf("uart address set to 0x{X}", .{addr});
+        printf("UART address set to 0x{X}", .{addr});
         ADDR = @ptrFromInt(addr);
     }
 

@@ -4,12 +4,15 @@ __stack_size = 4K;
 __max_harts = 1;
 
 MEMORY {
-    RAM (rwx) : ORIGIN = 0x80200000, LENGTH = 2M
+    RAM (rwx) : ORIGIN = 0x80200000, LENGTH = 20M
 }
 
+/* Not sure if we need the 4K alignments. */
 SECTIONS {
     .text : ALIGN(4K) {
-        *(.init);
+        KEEP(*(.text.init));
+        . = ALIGN(16);
+        *(.text.interrupt);
         *(.text*);
     } > RAM
 
@@ -21,7 +24,7 @@ SECTIONS {
         *(.data*);
     } > RAM
 
-    .bss : ALIGN(4K) {
+    .bss (NOLOAD) : ALIGN(4K) {
         __bss_start = .;
         *(.bss*);
         . = ALIGN(8);

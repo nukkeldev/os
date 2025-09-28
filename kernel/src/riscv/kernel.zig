@@ -54,30 +54,34 @@ fn main(hartid: usize, dtb_ptr: ?*anyopaque) !void {
     const str = try @import("std").fmt.allocPrint(allocator, "This was formatted by an allocator at 0x{X}!", .{@intFromPtr(&heap.ufa.?)});
     uart.printf("{s}", .{str});
 
-    const sstatus = asmh.csrr(asmh.SStatus, "sstatus");
-    uart.printf("{}", .{sstatus});
+    sbi.Time.setTimer(getTime() + 5_000_000);
 
     // NOTE: We can bypass SBI by writing to the syscon MMIO.
-    try sbi.SystemReset.reset(.shutdown, .no_reason);
+    // try sbi.SystemReset.reset(.shutdown, .no_reason);
+}
+
+fn getTime() usize {
+    return asm volatile (
+        \\rdtime t0
+        : [ret] "={t0}" (-> usize),
+        :
+        : .{ .x5 = true });
 }
 
 // -- VM Setup -- //
 
 pub export fn setup_vm_riscv() void {}
 
-// -- Trap Handler -- //
+// -- Interrupt Handler -- //
 
-pub export fn trap_handler_body_riscv(
-    cause: usize,
-    return_address: usize,
-    trap_value: usize,
-    context: usize,
-) void {
-    _ = cause;
-    _ = return_address;
-    _ = trap_value;
-    _ = context;
-    uart.printf("TRAPPED", .{});
+export fn reset_time_interrupts_riscv() void {
+    sbi.Time.setTimer(std.math.maxInt(usize));
+}
+
+// Ref: https://github.com/popovicu/zig-riscv-interrupts/blob/main/program.zig
+export fn interrupt_handler_riscv() align(16) linksection(".text.interrupt") callconv(.{ .riscv64_interrupt = .{ .mode = .supervisor } }) void {
+    uart.printf("Trapped", .{});
+    sbi.Time.setTimer(getTime() + 5_000_000);
 }
 
 // -- Panic Handler -- //
