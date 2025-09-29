@@ -56,7 +56,7 @@ _start:
         mv t0, a0
         mv t1, a1
         jal ra, reset_time_interrupts_riscv
-        mv a0, t1
+        mv a0, t0
         mv a1, t1
 
         // Setup S-mode traps
