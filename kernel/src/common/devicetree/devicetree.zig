@@ -86,15 +86,16 @@ pub fn parseFromBlob(allocator: std.mem.Allocator, ptr: ?*anyopaque) !Devicetree
                     .props = &.{},
                     .children = &.{},
                 };
-                parent = devices.items.len;
-                try devices.append(allocator, device);
 
-                if (parent) |p| {
-                    if (props.items.len > 0) {
+                if (props.items.len > 0) {
+                    if (parent) |p| {
                         devices.items[p].props = try props.toOwnedSlice(allocator);
                     }
                 }
                 props.clearAndFree(allocator);
+
+                parent = devices.items.len;
+                try devices.append(allocator, device);
 
                 i += 1 + (dc(usize, name.len + 1, 4) catch unreachable);
             },
@@ -115,6 +116,7 @@ pub fn parseFromBlob(allocator: std.mem.Allocator, ptr: ?*anyopaque) !Devicetree
 
                 const name_offs = b2n(u32, structure_block[i + 2]);
                 const name = std.mem.span(@as([*:0]const u8, @ptrCast(&strings_block[@intCast(name_offs)])));
+                @import("../io/uart.zig").printf("{s}", .{name});
 
                 try props.append(allocator, .{ .name = name, .value = @as([]const u8, @ptrCast(structure_block[i + 3 .. i + 3 + value_cell_len]))[0..value_byte_len] });
 
@@ -218,7 +220,7 @@ pub fn format(self: @This(), writer: *std.Io.Writer) std.Io.Writer.Error!void {
     for (self.devices, 0..) |device, i| {
         try writer.print("    [{}] {s} (^{?})\n", .{ i, if (device.name.len == 0) "(root)" else device.name, device.parent });
         for (device.props) |prop| {
-            try writer.print("      - {s}: {any} ({s})\n", .{ prop.name, prop.value, prop.value });
+            try writer.print("      - {s}\n", .{prop.name});
         }
     }
 }

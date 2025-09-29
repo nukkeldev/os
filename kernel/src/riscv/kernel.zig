@@ -27,6 +27,8 @@ pub export fn kmain_riscv(hartid: usize, dtb_ptr: ?*anyopaque) noreturn {
 fn main(hartid: usize, dtb_ptr: ?*anyopaque) !void {
     uart.printf("Entering `main` on hartid={}", .{hartid});
 
+    start_time = getTime();
+
     if (!try sbi.Base.probeExtension(sbi.Debug.EID)) {
         uart.printf("SBI DBCN is not available, further use will be disabled.", .{});
     } else {
@@ -39,12 +41,28 @@ fn main(hartid: usize, dtb_ptr: ?*anyopaque) !void {
     const allocator = heap.ufa.?.allocator();
 
     const dt = try Devicetree.parseFromBlob(allocator, dtb_ptr);
+    // uart.printf("{f}", .{dt});
+
     uart.initFromDevicetree(&dt) catch |e| {
         uart.printf("Failed to initialize uart! Error: {}", .{e});
     };
 
     const dram_len = try dt.getDeviceByName("memory").?.getProp("reg").?.readInt(u64, 8);
     uart.printf("Memory Size: 0x{X}", .{dram_len});
+
+    const cpus = dt.getDeviceByName("cpus") orelse {
+        uart.printf("Failed to get the \"cpus\" device!", .{});
+        return error.DeviceTree;
+    };
+
+    for (cpus.props) |*prop| uart.printf("{s}", .{prop.name});
+
+    timebase_freq = try (cpus.getProp("timebase-frequency") orelse {
+        uart.printf("Failed to get the \"timebase-frequency\" prop on the \"cpus\" device!", .{});
+        return error.DeviceTree;
+    }).readInt(u32, 0);
+
+    uart.printf("The system is starting at {} seconds.", .{ticksToSeconds(start_time)});
 
     uart.printf("Kernel ends and heap starts at 0x{X}.", .{heap.ufa.?.next_addr});
     uart.printf("Subsequent memory is available for use, with the exception of the previously listed reserved memory slices.", .{});
@@ -54,11 +72,18 @@ fn main(hartid: usize, dtb_ptr: ?*anyopaque) !void {
     const str = try @import("std").fmt.allocPrint(allocator, "This was formatted by an allocator at 0x{X}!", .{@intFromPtr(&heap.ufa.?)});
     uart.printf("{s}", .{str});
 
-    sbi.Time.setTimer(getTime() + 5_000_000);
+    const wait_time = secondsToTicks(5);
+    uart.printf("Waiting {} seconds ({} ticks)", .{ 5, wait_time });
+    const end = getTime() + wait_time;
+
+    while (getTime() < end) {}
 
     // NOTE: We can bypass SBI by writing to the syscon MMIO.
-    // try sbi.SystemReset.reset(.shutdown, .no_reason);
+    try sbi.SystemReset.reset(.shutdown, .no_reason);
 }
+
+var timebase_freq: usize = 1;
+var start_time: usize = 0;
 
 fn getTime() usize {
     return asm volatile (
@@ -66,6 +91,14 @@ fn getTime() usize {
         : [ret] "={t0}" (-> usize),
         :
         : .{ .x5 = true });
+}
+
+fn ticksToSeconds(ticks: usize) f64 {
+    return @as(f64, @floatFromInt(ticks)) / @as(f64, @floatFromInt(timebase_freq));
+}
+
+fn secondsToTicks(secs: f64) usize {
+    return @intFromFloat(secs * @as(f64, @floatFromInt(timebase_freq)));
 }
 
 // -- VM Setup -- //
@@ -108,6 +141,8 @@ pub const panic = @import("std").debug.FullPanic(struct {
             uart.printf("\t[{}] 0x{X}", .{ i, return_address });
             i += 1;
         }
+
+        sbi.SystemReset.reset(.shutdown, .no_reason) catch {};
 
         while (true) {}
     }
