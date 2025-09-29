@@ -1,24 +1,26 @@
-# `nukkel/os`
+# `rvhw`
 
-An operating system targeting 64-bit RISC-V written in Zig with no external libraries. It does not 
-intend to be anything groundbreaking, rather it serves as a learning exercise.
+An S-mode RISC-V kernel for on-device or "remote" hardware introspection. When loaded on device,
+the kernel presents either an interactive shell or connects to a companion program, both over UART.
+The companion program is the primary user target and is more featureful consequentially.
 
-Currently, only a basic S-mode kernel that supports the below features has been implemented.
+Features available in at least one method of interaction include:
+> This list is proactive an not all features are implemented yet.
+- Devicetree exploration
+  - Downloading to a host computer
+  - Viewing as DTS or graph
+  - Inspecting individual devices
+- Device interaction
+ - Writing and reading from MMIO devices (with included drivers if available)
+- Benchmarking
+  - TODO
 
-- Startup (per-hart stack, clearing bss, etc.)
-  - Though, only the boot hart is not parked.
-- UART Output
-- SBI Interaction
-- Heap Allocation (as basic as possible)
-- Devicetree parsing and traversal
-- Panic handling
-
-See the issue tracker for upcoming changes.
+The kernel does not have `satp` enabled and does not allow for arbitrary code execution.
 
 ## See Also
 
 The below resource were either referenced or intend to be referenced in the development of the
-operating system.
+project.
 
 ### Blogs & Wikis
 

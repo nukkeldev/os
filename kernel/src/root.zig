@@ -12,17 +12,80 @@ const Devicetree = @import("devicetree/devicetree.zig");
 // -- Constants -- //
 
 /// How many bytes are commands able to be?
-const SHELL_COMMAND_BUFFER_LENGTH = 512;
+const SHELL_COMMAND_BUFFER_LENGTH = 128;
+// const SHELL_COMMAND_HISTORY = 100;
 
-// -- Runtime Constants -- //
-// Configured with "reasonable" defaults.
+// -- System State -- //
 
-/// The update rate of the shell in ticks.
-var SHELL_UPDATE_RATE = 1_000;
-/// Platform-specific ticks per second.
-var TIME_BASE_FREQ: usize = 1_000_000;
-/// An arbitrary reference point for "time-since" operations.
-var START_TIME: usize = 0;
+pub var hart_state: *HartState = undefined;
+
+pub const HartState = struct {
+    /// The update rate of the shell in ticks.
+    shell_update_rate: usize = 1_000,
+    /// Platform-specific ticks per second.
+    time_base_freq: usize = 1_000_000,
+    /// An arbitrary reference point for "time-since" operations.
+    start_time: usize = 0,
+
+    devicetree: *const Devicetree,
+
+    pub fn init(allocator: std.mem.Allocator, devicetree: *const Devicetree) !*@This() {
+        const state = try allocator.create(@This());
+
+        state.devicetree = devicetree;
+        state.start_time = state.getTimeTicks();
+
+        const cpus = devicetree.getDeviceByName("cpus").?;
+        const prop_timebase_freq = cpus.getProp("timebase-frequency");
+
+        var timebase_set = false;
+        // TODO: Per the spec:
+        // Properties that have identical values across cpu nodes may be placed in the /cpus node
+        // instead. A client program must first examine a specific cpu node, but if an expected
+        // property is not found then it should look at the parent /cpus node.
+        if (prop_timebase_freq) |prop| blk: {
+            state.time_base_freq = prop.readInt(u32, 0) catch {
+                uart.printf("Property \"timebase-freqency\" did not have enough data to read a u32.", .{});
+                break :blk;
+            };
+            timebase_set = true;
+        } else {
+            uart.printf("Failed to get the \"timebase-frequency\" prop on the \"cpus\" device!", .{});
+        }
+
+        if (!timebase_set) {
+            uart.printf("Because we could not get the timebase frequency from the Devicetree, " ++
+                "we will be using the default which could lead to desynchronization.", .{});
+        }
+
+        uart.printf("System has a timebase frequency of {} ticks/second.", .{state.time_base_freq});
+        uart.printf("System starting from {} ticks ({} seconds).", .{ state.start_time, state.ticksToSeconds(state.start_time) });
+
+        state.shell_update_rate = state.secondsToTicks(0.01);
+
+        return state;
+    }
+
+    pub inline fn getTimeTicks(_: *const @This()) usize {
+        return asm volatile (
+            \\rdtime t0
+            : [ret] "={t0}" (-> usize),
+            :
+            : .{ .x5 = true });
+    }
+
+    pub inline fn getTimeSeconds(self: *const @This()) f64 {
+        return self.ticksToSeconds(self.getTimeTicks());
+    }
+
+    fn ticksToSeconds(self: *const @This(), ticks: usize) f64 {
+        return @as(f64, @floatFromInt(ticks)) / @as(f64, @floatFromInt(self.time_base_freq));
+    }
+
+    fn secondsToTicks(self: *const @This(), secs: f64) usize {
+        return @intFromFloat(secs * @as(f64, @floatFromInt(self.time_base_freq)));
+    }
+};
 
 // -- Main -- //
 
@@ -46,27 +109,16 @@ fn main(dtb_ptr: ?*anyopaque) !void {
     const allocator = heap.ufa.?.allocator();
 
     // Parse the Devicetree.
-    const dt = try Devicetree.parseFromBlob(allocator, dtb_ptr);
+    const dt = try allocator.create(Devicetree);
+    dt.* = try Devicetree.parseFromBlob(allocator, dtb_ptr);
 
     // Attempt to initialize the UART with the corresponding Devicetree device.
-    uart.initFromDevicetree(&dt) catch |e| {
+    uart.initFromDevicetree(dt) catch |e| {
         uart.printf("Failed to initialize uart! Error: {}", .{e});
     };
 
-    // Setup global timing.
-    setupTiming(&dt);
-
-    // Get memory available for use.
-    const dram_len = try dt.getDeviceByName("memory").?.getProp("reg").?.readInt(u64, 8);
-    uart.printf("Memory Size: 0x{X}", .{dram_len});
-
-    uart.printf("Kernel ends and heap starts at 0x{X}.", .{heap.ufa.?.next_addr});
-    uart.printf("Subsequent memory is available for use, with the exception of the previously listed reserved memory slices.", .{});
-
-    uart.printf("Attempting to dynamically allocate memory for a format...", .{});
-
-    const str = try @import("std").fmt.allocPrint(allocator, "This was formatted by an allocator at 0x{X}!", .{@intFromPtr(&heap.ufa.?)});
-    uart.printf("{s}", .{str});
+    // Setup hart system state.
+    hart_state = try HartState.init(allocator, dt);
 
     // Start a shell for user interaction.
     var done = false;
@@ -76,16 +128,19 @@ fn main(dtb_ptr: ?*anyopaque) !void {
 
     uart.print("> ");
     while (!done) {
-        const process = processShell(&cmd_buf_writer) catch {
+        const state = readChar(&cmd_buf_writer) catch {
             uart.printf("Commands are limited to {} bytes!", .{SHELL_COMMAND_BUFFER_LENGTH});
             continue;
         };
 
-        if (process) {
-            uart.print("\r\n");
-            done = try processCommand(std.mem.trim(u8, cmd_buf[0..cmd_buf_writer.end], &std.ascii.whitespace));
-            cmd_buf_writer.end = 0;
-            uart.print("> ");
+        switch (state) {
+            .submit => {
+                uart.print("\r\n");
+                done = try processCommand(std.mem.trim(u8, cmd_buf[0..cmd_buf_writer.end], &std.ascii.whitespace));
+                cmd_buf_writer.end = 0;
+                uart.print("> ");
+            },
+            .progress => {},
         }
     }
 
@@ -93,75 +148,132 @@ fn main(dtb_ptr: ?*anyopaque) !void {
     try sbi.SystemReset.reset(.shutdown, .no_reason);
 }
 
+const ReadByteState = union(enum) {
+    submit,
+    progress,
+    // TODO: Command History
+};
+
 /// Reads a byte from UART and returns whether the command is "done".
-fn processShell(cmd_buf_writer: *std.Io.Writer) !bool {
-    switch (uart.readByte()) {
-        8, 127 => if (cmd_buf_writer.end > 0) {
-            uart.print("\x08 \x08");
-            cmd_buf_writer.end -= 1;
+fn readChar(cmd_buf_writer: *std.Io.Writer) !ReadByteState {
+    const State = union(enum) {
+        empty,
+        escape,
+        arrow,
+    };
+    const MAX_WAIT_DEPTH = 100;
+
+    var wait_depth: usize = 0;
+    sw: switch (State.empty) {
+        .empty => switch (uart.readByte()) {
+            8, 127 => if (cmd_buf_writer.end > 0) {
+                uart.print("\x08 \x08");
+                cmd_buf_writer.end -= 1;
+            },
+            std.ascii.control_code.esc => continue :sw .escape,
+            10, 13 => {
+                return .submit;
+            },
+            0 => {},
+            else => |c| {
+                if (std.ascii.isPrint(c)) uart.printChar(c);
+                try cmd_buf_writer.writeByte(c);
+            },
         },
-        10, 13 => {
-            return true;
+        .escape => switch (uart.readByte()) {
+            '[' => continue :sw .arrow,
+            else => {
+                if (wait_depth > MAX_WAIT_DEPTH) {
+                    break :sw;
+                }
+                wait_depth += 1;
+                continue :sw .escape;
+            },
         },
-        0 => {},
-        else => |c| {
-            if (std.ascii.isPrint(c)) uart.printChar(c);
-            try cmd_buf_writer.writeByte(c);
+        .arrow => switch (uart.readByte()) {
+            'A' => {}, // Up Arrow
+            'B' => {}, // Down Arrow
+            'C' => {}, // Right Arrow
+            'D' => {}, // Left Arrow
+            else => {
+                if (wait_depth > MAX_WAIT_DEPTH) {
+                    uart.print("Incomplete arrow sequence timeout!\n");
+                    break :sw;
+                }
+                wait_depth += 1;
+                continue :sw .arrow;
+            },
         },
     }
-    return false;
+
+    return .progress;
 }
+
+const COMMANDS: std.StaticStringMap(*const fn ([]const u8) bool) = .initComptime(.{
+    .{ "help", commandHelp },
+    .{ "ls", commandLs },
+    .{ "quit", commandQuit },
+});
 
 fn processCommand(command: []const u8) !bool {
-    uart.printf("Running command '{s}'.", .{command});
+    if (command.len == 0) return false;
 
-    if (std.ascii.eqlIgnoreCase(command, "quit")) return true;
+    uart.printf("Running command '{s}' ({any}).", .{ command, command });
+
+    const first_split = std.mem.indexOfScalar(u8, command, ' ') orelse command.len;
+    const root_command = command[0..first_split];
+
+    const command_fn = COMMANDS.get(root_command) orelse {
+        uart.printf("Command '{s}' ({any}) does not exist!", .{ root_command, root_command });
+        return false;
+    };
+
+    return command_fn(command[first_split..]);
+}
+
+fn commandHelp(_: []const u8) bool {
+    uart.print(
+        \\Available Commands:
+        \\
+    );
+
+    for (COMMANDS.keys()) |key| {
+        uart.printf("  {s}", .{key});
+    }
+
     return false;
 }
 
-// -- Timing -- //
+fn commandQuit(_: []const u8) bool {
+    return true;
+}
 
-/// Setups global state necessary for tick to wall-time synchronization.
-fn setupTiming(dt: *const Devicetree) void {
-    START_TIME = getTime();
+fn commandLs(args: []const u8) bool {
+    var tokens = std.mem.tokenizeAny(u8, args, &std.ascii.whitespace);
 
-    const cpus = dt.getDeviceByName("cpus").?;
-    const prop_timebase_freq = cpus.getProp("timebase-frequency");
+    var print_usage = false;
+    blk: {
+        if (tokens.next()) |token| {
+            if (std.mem.eql(u8, "--help", token)) {
+                print_usage = true;
+                break :blk;
+            }
+        }
 
-    var timebase_set = false;
-    if (prop_timebase_freq) |prop| blk: {
-        TIME_BASE_FREQ = prop.readInt(u32, 0) catch {
-            uart.printf("Property \"timebase-freqency\" did not have enough data to read a u32.", .{});
-            break :blk;
-        };
-        timebase_set = true;
-    } else {
-        uart.printf("Failed to get the \"timebase-frequency\" prop on the \"cpus\" device!", .{});
+        for (hart_state.devicetree.devices) |*device| {
+            uart.printf("- {s}", .{device.name});
+        }
     }
 
-    if (!timebase_set) {
-        uart.printf("Because we could not get the timebase frequency from the Devicetree, " ++
-            "we will be using the default which could lead to desynchronization.", .{});
+    if (print_usage) {
+        uart.print(
+            \\Usage: ls 
+            \\Lists devices in the Devicetree.
+            \\
+        );
     }
 
-    uart.printf("System has a timebase frequency of {} ticks/second.", .{TIME_BASE_FREQ});
-    uart.printf("System starting from {} ticks ({} seconds).", .{ START_TIME, ticksToSeconds(START_TIME) });
-}
-
-inline fn getTime() usize {
-    return asm volatile (
-        \\rdtime t0
-        : [ret] "={t0}" (-> usize),
-        :
-        : .{ .x5 = true });
-}
-
-fn ticksToSeconds(ticks: usize) f64 {
-    return @as(f64, @floatFromInt(ticks)) / @as(f64, @floatFromInt(TIME_BASE_FREQ));
-}
-
-fn secondsToTicks(secs: f64) usize {
-    return @intFromFloat(secs * @as(f64, @floatFromInt(TIME_BASE_FREQ)));
+    return false;
 }
 
 // -- SBI Capabilities -- //
