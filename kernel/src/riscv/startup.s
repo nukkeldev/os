@@ -18,8 +18,9 @@
 //   - When prefixed with `U/S/M`, refers to the width in `User`, `Supervisor`, and `Machine` modes respectively.
 // - `hart`: Hardware Thread; A basic unit of execution (i.e. a CPU core).
 
-.section .init
+.section .text.init
 .global _start
+.type   _start, @function
 
 _start:
         // Park all harts but the boot.
@@ -40,19 +41,46 @@ _start:
         // Zero BSS
         la t0, __bss_start
         la t1, __bss_end
-        bss:
+        bgeu t0, t1, 2f
+        1:
                 sd zero, (t0)
                 addi t0, t0, 0x8
-                bltu t0, t1, bss
+                bltu t0, t1, 1b
+        2:
+        
 
         // Configure setp for Sv39 VM paging.
         csrw satp, zero
-        
-        // Invoke `kmain_riscv` with a0=hartid and a1=dtb_ptr, setting the return address to ra.
-        jal ra, kmain_riscv 
+
+        // Reset timer interrupts
+        mv t0, a0
+        mv t1, a1
+        jal ra, reset_time_interrupts_riscv
+        mv a0, t1
+        mv a1, t1
+
+        // Setup S-mode traps
+        la t0, interrupt_handler_riscv
+        csrw stvec, t0
+
+        // Configure interrupts
+        li t0, (1 << 1) | (1 << 5) | (1 << 8)
+        csrs sstatus, t0      
+
+        // Set sret to return to kmain
+        la t1, kmain_riscv
+        csrw sepc, t1
+
+        // Enable interrupts
+        li t3, (1 << 9) | (1 << 1) | (1 << 5)
+        csrs sie, t3
+
+        // If we return, park the hart.
+        la ra, 3f
+        sret
 
         // Hang if kmain returns.        
-        1:
+        3:
                 wfi
-                j 1b
+                j 3b
 .end
