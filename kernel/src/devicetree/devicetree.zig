@@ -8,7 +8,7 @@ const b2n = std.mem.bigToNative;
 const n2b = std.mem.nativeToBig;
 const dc = std.math.divCeil;
 
-const printf = @import("../io/uart.zig").printf;
+const printf = @import("../mmio/uart.zig").printf;
 
 const MAX_SUPPORTED_VERSION = 17;
 const MIN_SUPPORTED_VERSION = 16;

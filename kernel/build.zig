@@ -25,7 +25,6 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
-        // Ensure the kernel uses relative symbol addresses so things work after vm relocation.
         .code_model = .medany,
         .strip = false,
     });
@@ -36,8 +35,8 @@ pub fn build(b: *std.Build) void {
         .root_module = mod,
     });
 
-    exe.addAssemblyFile(b.path("src/riscv/startup.s"));
-    exe.setLinkerScript(b.path("src/riscv/linker.ld"));
+    exe.addAssemblyFile(b.path("src/startup.s"));
+    exe.setLinkerScript(b.path("src/linker.ld"));
 
     const install_exe = b.addInstallArtifact(exe, .{});
     b.getInstallStep().dependOn(&install_exe.step);
