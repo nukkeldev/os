@@ -6,7 +6,7 @@ const DTB_COMPAT = switch (@import("builtin").cpu.arch) {
 };
 
 var BUFFER: [16 * 1024]u8 = @splat(0);
-var ADDR: *u8 = @ptrFromInt(0x10_000_000); // Hardcoded Fallback (set to QEMU virt's address)
+var ADDR: *volatile u8 = @ptrFromInt(0x10_000_000); // Hardcoded Fallback (set to QEMU virt's address)
 
 // -- Initialization -- //
 
@@ -32,8 +32,20 @@ pub fn initFromDevicetree(dt: *const @import("../devicetree/devicetree.zig")) !v
 pub fn printf(comptime fmt: []const u8, args: anytype) void {
     if (comptime !@import("options").uart) return;
 
-    const str = @import("std").fmt.bufPrint(&BUFFER, "[UART] " ++ fmt ++ "\n", args) catch unreachable;
+    const str = @import("std").fmt.bufPrint(&BUFFER, "[UART] " ++ fmt ++ "\r\n", args) catch unreachable;
     for (str) |c| ADDR.* = c;
+}
+
+pub fn print(msg: []const u8) void {
+    for (msg) |c| ADDR.* = c;
+}
+
+pub fn printChar(char: u8) void {
+    ADDR.* = char;
+}
+
+pub fn readByte() u8 {
+    return ADDR.*;
 }
 
 // -- Writer -- //

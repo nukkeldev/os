@@ -1,30 +1,10 @@
-// The kernel's entrypoint after SBI.
-//
-// SBI leaves the hart in the following state:
-// - S-mode (hence SBI).
-// - a0 = hartid, a1 = devicetree blob ptr
-// - (I believe) SBI leaves all harts, besides id=0, parked in M-Mode until they are started with HSM.
-// 
-// Referencing:
-// 1. https://wiki.osdev.org/RISC-V_Bare_Bones
-// 2. https://sourceware.org/binutils/docs/as.html#RISC_002dV_002dDirectives
-// 3. https://github.com/riscv-non-isa/riscv-asm-manual/blob/main/src/asm-manual.adoc
-// 4. The RISC-V Instruction Set Manual Volume II: Privileged Architecture [Version 20250508]
-// 5. The RISC-V Instruction Set Manual Volume II: Unprivileged ISA [Version 20250508]
-// 6. https://www.cs.sfu.ca/~ashriram/Courses/CS295/assets/notebooks/RISCV/RISCV_CARD.pdf
-//
-// Terminology:
-// - `XLEN`: The width of registers in the _current_ mode.
-//   - When prefixed with `U/S/M`, refers to the width in `User`, `Supervisor`, and `Machine` modes respectively.
-// - `hart`: Hardware Thread; A basic unit of execution (i.e. a CPU core).
-
 .section .text.init
 .global _start
 .type   _start, @function
 
 _start:
         // Park all harts but the boot.
-        bnez a0, 1f
+        bnez a0, halt
 
         // Set the stack pointer to the top of the stack.
         la sp, __stack_top
@@ -38,25 +18,21 @@ _start:
         // Add the offset to the stack pointer.
         add sp, sp, t0
 
-        // Zero BSS
+        // Zero BSS because it's annotated as NOLOAD.
         la t0, __bss_start
         la t1, __bss_end
         bgeu t0, t1, 2f
         1:
                 sd zero, (t0)
-                addi t0, t0, 0x8
+                addi t0, t0, 8
                 bltu t0, t1, 1b
         2:
         
-
-        // Configure setp for Sv39 VM paging.
-        csrw satp, zero
-
         // Reset timer interrupts
         mv t0, a0
         mv t1, a1
         jal ra, reset_time_interrupts_riscv
-        mv a0, t1
+        mv a0, t0
         mv a1, t1
 
         // Setup S-mode traps
@@ -68,7 +44,7 @@ _start:
         csrs sstatus, t0      
 
         // Set sret to return to kmain
-        la t1, kmain_riscv
+        la t1, kmain
         csrw sepc, t1
 
         // Enable interrupts
@@ -76,11 +52,11 @@ _start:
         csrs sie, t3
 
         // If we return, park the hart.
-        la ra, 3f
+        la ra, halt
         sret
 
         // Hang if kmain returns.        
-        3:
+        halt:
                 wfi
-                j 3b
+                j halt
 .end

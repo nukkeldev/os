@@ -7,7 +7,7 @@
 //! See https://github.com/riscv-non-isa/riscv-sbi-doc/blob/master/src/binary-encoding.adoc and sibling
 //! documents.
 
-const uart = @import("../common/io/uart.zig");
+const uart = @import("mmio/uart.zig");
 const fmt = @import("std").fmt;
 
 // -- Errors -- //
