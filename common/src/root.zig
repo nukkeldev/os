@@ -42,6 +42,13 @@ pub const HostMessage = struct {
         /// Ends the communication with the device; freeing up the host id.
         @"goodbye!",
     };
+
+    pub fn expectsResponse(msg: *const @This()) bool {
+        return switch (msg.content) {
+            .@"are_you_there?", .@"what_time_is_it?" => true,
+            .@"goodbye!" => false,
+        };
+    }
 };
 
 test HostMessage {

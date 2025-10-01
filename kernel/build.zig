@@ -27,6 +27,9 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .code_model = .medany,
         .strip = false,
+        .imports = &.{
+            .{ .name = "common", .module = b.dependency("common", .{}).module("common") },
+        },
     });
     mod.addImport("options", options.createModule());
 
@@ -60,11 +63,17 @@ pub fn build(b: *std.Build) void {
             "1G",
             "-device",
             "virtio-vga", // VGA over PCI
+            "-chardev",
+            "socket,id=uart0,path=/tmp/rvhw.uart.sock,server=on,wait=off",
+            "-serial",
+            "chardev:uart0",
             "-kernel",
         });
         cmd.addFileArg(b.path("zig-out/bin/kernel.elf"));
 
-        if (nographic) cmd.addArg("-nographic");
+        if (nographic) {
+            cmd.addArg("-nographic");
+        }
         if (gdb) {
             cmd.addArg("-gdb");
             cmd.addArg(b.fmt("tcp::{}", .{gdb_port}));
