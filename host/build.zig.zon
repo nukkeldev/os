@@ -1,5 +1,5 @@
 .{
-    .name = .kernel,
+    .name = .host,
     .version = "0.0.1",
     .dependencies = .{
         .common = .{
@@ -9,5 +9,5 @@
     },
     .minimum_zig_version = "0.15.1",
     .paths = .{""},
-    .fingerprint = 0x5dd29aab81b0500f,
+    .fingerprint = 0xcf2713fdf19ae71a,
 }

@@ -1,6 +1,7 @@
 // -- Imports -- //
 
 const std = @import("std");
+const common = @import("common");
 
 const asmh = @import("asmh.zig");
 const heap = @import("mem/heap.zig");
@@ -120,160 +121,37 @@ fn main(dtb_ptr: ?*anyopaque) !void {
     // Setup hart system state.
     hart_state = try HartState.init(allocator, dt);
 
-    // Start a shell for user interaction.
-    var done = false;
+    while (true) {
+        // switch (uart.readByte()) {
+        //     common.HostMessage.MAGIC => {
+        //         var msg: [common.MAX_MESSAGE_LENGTH]u8 = undefined;
+        //         msg[0] = common.HostMessage.MAGIC;
 
-    var cmd_buf: [SHELL_COMMAND_BUFFER_LENGTH]u8 = undefined;
-    var cmd_buf_writer: std.Io.Writer = .fixed(&cmd_buf);
+        //         var i: usize = 1;
+        //         // var loops: usize = 0;
+        //         sw: switch (uart.readByte()) {
+        //             common.SENTINAL => msg[i] = common.SENTINAL,
+        //             else => |c| {
+        //                 msg[i] = c;
+        //                 i += 1;
+        //                 continue :sw uart.readByte();
+        //             },
+        //         }
 
-    uart.print("> ");
-    while (!done) {
-        const state = readChar(&cmd_buf_writer) catch {
-            uart.printf("Commands are limited to {} bytes!", .{SHELL_COMMAND_BUFFER_LENGTH});
-            continue;
+        const response: common.DeviceMessage = .{
+            .content = .@"i_am_here!",
         };
-
-        switch (state) {
-            .submit => {
-                uart.print("\r\n");
-                done = try processCommand(std.mem.trim(u8, cmd_buf[0..cmd_buf_writer.end], &std.ascii.whitespace));
-                cmd_buf_writer.end = 0;
-                uart.print("> ");
-            },
-            .progress => {},
-        }
+        const bytes = try common.serialize(common.DeviceMessage, allocator, &response);
+        uart.print(bytes);
+        //     },
+        //     0 => {},
+        //     else => {},
+        // }
+        // uart.printChar(uart.readByte());
     }
 
     // NOTE: We can bypass SBI by writing to the syscon MMIO.
     try sbi.SystemReset.reset(.shutdown, .no_reason);
-}
-
-const ReadByteState = union(enum) {
-    submit,
-    progress,
-    // TODO: Command History
-};
-
-/// Reads a byte from UART and returns whether the command is "done".
-fn readChar(cmd_buf_writer: *std.Io.Writer) !ReadByteState {
-    const State = union(enum) {
-        empty,
-        escape,
-        arrow,
-    };
-    const MAX_WAIT_DEPTH = 100;
-
-    var wait_depth: usize = 0;
-    sw: switch (State.empty) {
-        .empty => switch (uart.readByte()) {
-            8, 127 => if (cmd_buf_writer.end > 0) {
-                uart.print("\x08 \x08");
-                cmd_buf_writer.end -= 1;
-            },
-            std.ascii.control_code.esc => continue :sw .escape,
-            10, 13 => {
-                return .submit;
-            },
-            0 => {},
-            else => |c| {
-                if (std.ascii.isPrint(c)) uart.printChar(c);
-                try cmd_buf_writer.writeByte(c);
-            },
-        },
-        .escape => switch (uart.readByte()) {
-            '[' => continue :sw .arrow,
-            else => {
-                if (wait_depth > MAX_WAIT_DEPTH) {
-                    break :sw;
-                }
-                wait_depth += 1;
-                continue :sw .escape;
-            },
-        },
-        .arrow => switch (uart.readByte()) {
-            'A' => {}, // Up Arrow
-            'B' => {}, // Down Arrow
-            'C' => {}, // Right Arrow
-            'D' => {}, // Left Arrow
-            else => {
-                if (wait_depth > MAX_WAIT_DEPTH) {
-                    uart.print("Incomplete arrow sequence timeout!\n");
-                    break :sw;
-                }
-                wait_depth += 1;
-                continue :sw .arrow;
-            },
-        },
-    }
-
-    return .progress;
-}
-
-const COMMANDS: std.StaticStringMap(*const fn ([]const u8) bool) = .initComptime(.{
-    .{ "help", commandHelp },
-    .{ "ls", commandLs },
-    .{ "quit", commandQuit },
-});
-
-fn processCommand(command: []const u8) !bool {
-    if (command.len == 0) return false;
-
-    uart.printf("Running command '{s}' ({any}).", .{ command, command });
-
-    const first_split = std.mem.indexOfScalar(u8, command, ' ') orelse command.len;
-    const root_command = command[0..first_split];
-
-    const command_fn = COMMANDS.get(root_command) orelse {
-        uart.printf("Command '{s}' ({any}) does not exist!", .{ root_command, root_command });
-        return false;
-    };
-
-    return command_fn(command[first_split..]);
-}
-
-fn commandHelp(_: []const u8) bool {
-    uart.print(
-        \\Available Commands:
-        \\
-    );
-
-    for (COMMANDS.keys()) |key| {
-        uart.printf("  {s}", .{key});
-    }
-
-    return false;
-}
-
-fn commandQuit(_: []const u8) bool {
-    return true;
-}
-
-fn commandLs(args: []const u8) bool {
-    var tokens = std.mem.tokenizeAny(u8, args, &std.ascii.whitespace);
-
-    var print_usage = false;
-    blk: {
-        if (tokens.next()) |token| {
-            if (std.mem.eql(u8, "--help", token)) {
-                print_usage = true;
-                break :blk;
-            }
-        }
-
-        for (hart_state.devicetree.devices) |*device| {
-            uart.printf("- {s}", .{device.name});
-        }
-    }
-
-    if (print_usage) {
-        uart.print(
-            \\Usage: ls 
-            \\Lists devices in the Devicetree.
-            \\
-        );
-    }
-
-    return false;
 }
 
 // -- SBI Capabilities -- //
